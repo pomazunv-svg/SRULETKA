@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Колесо Фортуны</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+      text-align: center;
+      overflow-x: hidden;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      text-shadow: 0 0 20px rgba(255,255,255,0.3);
+    }
+    .subtitle {
+      color: #aaa;
+      margin-bottom: 30px;
+      font-size: 1.1rem;
+    }
+    #wheel-wrapper {
+      position: relative;
+      width: 500px;
+      height: 500px;
+      margin: 0 auto 30px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      box-shadow: 0 0 50px rgba(0, 200, 255, 0.4), inset 0 0 30px rgba(0,0,0,0.5);
+    }
+    .pointer {
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-top: 40px solid #ff4757;
+      z-index: 10;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+    }
+    #spin-btn {
+      background: linear-gradient(135deg, #00d4ff, #0088ff);
+      color: #fff;
+      border: none;
+      padding: 16px 50px;
+      font-size: 20px;
+      font-weight: 700;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 6px 25px rgba(0, 150, 255, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    #spin-btn:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 10px 35px rgba(0, 150, 255, 0.7);
+    }
+    #spin-btn:active:not(:disabled) { transform: translateY(1px); }
+    #spin-btn:disabled {
+      background: #444;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    #result {
+      min-height: 60px;
+      margin-top: 20px;
+      padding: 15px 30px;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #00ffcc;
+      opacity: 0;
+      transition: opacity 0.5s;
+      max-width: 90vw;
+    }
+    #result.show { opacity: 1; }
+    @media (max-width: 600px) {
+      h1 { font-size: 1.8rem; }
+      #wheel-wrapper { width: 350px; height: 350px; }
+      #spin-btn { padding: 14px 40px; font-size: 18px; }
+      #result { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎁 Испытай удачу!</h1>
+  <p class="subtitle">Крути колесо и получи приз</p>
+
+  <div id="wheel-wrapper">
+    <div class="pointer"></div>
+    <canvas id="wheel" width="600" height="600"></canvas>
+  </div>
+
+  <button id="spin-btn">КРУТИТЬ</button>
+  <div id="result"></div>
+
+  <script>
+    // ================= НАСТРОЙКИ =================
+    // probability: чем больше число, тем выше шанс (и тем шире сектор)
+    // Скрипт сам посчитает проценты и нарисует колесо.
+    const segments = [
+      { text: 'Скидка 1%',    probability: 100, color: '#FF6B6B' },
+      { text: 'Скидка 10%',   probability: 5, color: '#4ECDC4' },
+      { text: 'Скидка 15%',   probability: 5, color: '#45B7D1' },
+      { text: 'Доставка',     probability: 5, color: '#FFA07A' },
+      { text: 'Подарок',      probability: 5,  color: '#98D8C8' },
+      { text: 'Промокод ИДИ НАХУЙ!',     probability: 100, color: '#F7DC6F' },
+      { text: 'Скидка 20%',   probability: 5, color: '#BB8FCE' },
+      { text: 'Повтори',      probability: 5, color: '#85C1E2' }
+    ];
+    // ============================================================
+
+    const SPIN_KEY = 'fortune_wheel_spun_v3';
+    const hasSpun = localStorage.getItem(SPIN_KEY) === 'true';
+
+    const canvas = document.getElementById('wheel');
+    const ctx = canvas.getContext('2d');
+    const spinBtn = document.getElementById('spin-btn');
+    const resultDiv = document.getElementById('result');
+
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = canvas.width / 2 - 15;
+    const totalProb = segments.reduce((sum, seg) => sum + seg.probability, 0);
+
+    // Предвычисляем углы секторов для точной работы алгоритма
+    let currentStartAngle = 0;
+    segments.forEach(seg => {
+      const width = (seg.probability / totalProb) * (2 * Math.PI);
+      seg.startAngle = currentStartAngle;
+      seg.endAngle = currentStartAngle + width;
+      currentStartAngle += width;
+    });
+
+    let currentAngle = 0;
+    let isSpinning = false;
+
+    if (hasSpun) {
+      spinBtn.disabled = true;
+      spinBtn.textContent = 'Уже крутили';
+      resultDiv.textContent = 'Спасибо за участие! 🎉';
+      resultDiv.classList.add('show');
+    }
+
+    // Рисуем колесо
+    function drawWheel(rotation = 0) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(rotation);
+
+      segments.forEach((seg) => {
+        // Рисуем сектор
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, seg.startAngle, seg.endAngle);
+        ctx.closePath();
+        ctx.fillStyle = seg.color;
+        ctx.fill();
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // Рисуем текст
+        ctx.save();
+        const textAngle = seg.startAngle + (seg.endAngle - seg.startAngle) / 2;
+        ctx.rotate(textAngle);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 22px Segoe UI, sans-serif';
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        ctx.fillText(seg.text, radius - 30, 8);
+        ctx.restore();
+      });
+
+      // Центральный круг
+      ctx.beginPath();
+      ctx.arc(0, 0, 35, 0, 2 * Math.PI);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = '#00d4ff';
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      
+      ctx.fillStyle = '#302b63';
+      ctx.font = 'bold 16px Segoe UI';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('LUCKY', 0, 0);
+
+      ctx.restore();
+    }
+
+    // Вращение с гарантированным попаданием внутрь сектора
+    function spin() {
+      if (isSpinning || hasSpun) return;
+      isSpinning = true;
+      spinBtn.disabled = true;
+
+      // 1. Выбираем случайный сектор на основе вероятностей
+      const r = Math.random() * totalProb;
+      let chosenSeg = segments[0];
+      let acc = 0;
+      for (let seg of segments) {
+        acc += seg.probability;
+        if (r <= acc) {
+          chosenSeg = seg;
+          break;
+        }
+      }
+
+      // 2. Рассчитываем угол остановки ВНУТРИ сектора (с отступом от краёв)
+      const segWidth = chosenSeg.endAngle - chosenSeg.startAngle;
+      // Отступ: 15% от ширины сектора, но не более 0.12 радиан (~7°)
+      const margin = Math.min(segWidth * 0.15, 0.12); 
+      const stopAngle = chosenSeg.startAngle + margin + Math.random() * (segWidth - 2 * margin);
+
+      // 3. Вычисляем, на сколько нужно повернуть колесо, чтобы stopAngle оказался под стрелкой (сверху)
+      // Стрелка статична на 270° (3π/2). Колесо крутится по часовой.
+      // Условие: (stopAngle + rotation) % 2π = 3π/2
+      let rotationNeeded = (3 * Math.PI / 2) - stopAngle;
+      rotationNeeded = ((rotationNeeded % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+      // 4. Добавляем к текущему углу: минимум 5 полных оборотов + точная доводка
+      const currentMod = currentAngle % (2 * Math.PI);
+      let delta = rotationNeeded - currentMod;
+      if (delta < 0) delta += 2 * Math.PI;
+
+      const targetAngle = currentAngle + (5 * 2 * Math.PI) + delta;
+      const duration = 5000;
+      const startTime = performance.now();
+      const startAngle = currentAngle;
+
+      function animate(time) {
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // Плавное замедление
+        
+        currentAngle = startAngle + (targetAngle - startAngle) * ease;
+        drawWheel(currentAngle);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          finishSpin(chosenSeg);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    function finishSpin(winningSeg) {
+      isSpinning = false;
+      localStorage.setItem(SPIN_KEY, 'true');
+      
+      resultDiv.textContent = `🎉 Ваш приз: ${winningSeg.text}`;
+      resultDiv.classList.add('show');
+      spinBtn.textContent = 'Готово!';
+    }
+
+    spinBtn.addEventListener('click', spin);
+    drawWheel(0);
+
+    function resize() {
+      const wrapper = document.getElementById('wheel-wrapper');
+      const size = wrapper.clientWidth;
+      canvas.style.width = size + 'px';
+      canvas.style.height = size + 'px';
+    }
+    window.addEventListener('resize', resize);
+    resize();
+  </script>
+</body>
+</html>
