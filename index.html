@@ -115,21 +115,21 @@
 
   <script>
     // ================= НАСТРОЙКИ =================
-    // probability: чем больше число, тем выше шанс (и тем шире сектор)
-    // Скрипт сам посчитает проценты и нарисует колесо.
+    // Все сектора будут ОДИНАКОВОГО размера визуально.
+    // probability: шанс выпадения в % (сумма всех должна быть 100)
     const segments = [
-      { text: 'Скидка 5%',    probability: 60, color: '#FF6B6B' },
-      { text: 'Скидка 10%',   probability: 40, color: '#4ECDC4' },
-      { text: 'Скидка 15%',   probability: 20, color: '#45B7D1' },
-      { text: 'Скидка 20%',   probability: 10, color: '#FFA07A' },
-      { text: 'Массаж шеи',      probability: 30,  color: '#98D8C8' },
-      { text: 'Промокод ВЕСНА!',     probability: 80, color: '#F7DC6F' },
-      { text: 'КОФЕ с собой',   probability: 80, color: '#BB8FCE' },
-      { text: 'Массаж стоп',      probability: 30, color: '#85C1E2' }
+      { text: 'Скидка 5%',    probability: 15, color: '#FF6B6B' },
+      { text: 'Скидка 10%',   probability: 15, color: '#4ECDC4' },
+      { text: 'Скидка 15%',   probability: 15, color: '#45B7D1' },
+      { text: 'Скидка 20%',   probability: 5,  color: '#FFA07A' },
+      { text: 'Массаж шеи',   probability: 10, color: '#98D8C8' },
+      { text: 'Промокод ВЕСНА!', probability: 15, color: '#F7DC6F' },
+      { text: 'КОФЕ с собой', probability: 15, color: '#BB8FCE' },
+      { text: 'Массаж стоп',  probability: 10, color: '#85C1E2' }
     ];
     // ============================================================
 
-    const SPIN_KEY = 'fortune_wheel_spun_v3';
+    const SPIN_KEY = 'fortune_wheel_spun_v4';
     const hasSpun = localStorage.getItem(SPIN_KEY) === 'true';
 
     const canvas = document.getElementById('wheel');
@@ -140,15 +140,16 @@
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const radius = canvas.width / 2 - 15;
-    const totalProb = segments.reduce((sum, seg) => sum + seg.probability, 0);
+    
+    // Все сектора одинаковые: 360° / количество
+    const segmentCount = segments.length;
+    const equalAngle = (2 * Math.PI) / segmentCount;
 
-    // Предвычисляем углы секторов для точной работы алгоритма
-    let currentStartAngle = 0;
-    segments.forEach(seg => {
-      const width = (seg.probability / totalProb) * (2 * Math.PI);
-      seg.startAngle = currentStartAngle;
-      seg.endAngle = currentStartAngle + width;
-      currentStartAngle += width;
+    // Предвычисляем углы для отрисовки (равные)
+    segments.forEach((seg, i) => {
+      seg.visualStart = i * equalAngle;
+      seg.visualEnd = (i + 1) * equalAngle;
+      seg.index = i;
     });
 
     let currentAngle = 0;
@@ -161,7 +162,7 @@
       resultDiv.classList.add('show');
     }
 
-    // Рисуем колесо
+    // Рисуем колесо с РАВНЫМИ секторами
     function drawWheel(rotation = 0) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.save();
@@ -169,10 +170,10 @@
       ctx.rotate(rotation);
 
       segments.forEach((seg) => {
-        // Рисуем сектор
+        // Равный сектор
         ctx.beginPath();
         ctx.moveTo(0, 0);
-        ctx.arc(0, 0, radius, seg.startAngle, seg.endAngle);
+        ctx.arc(0, 0, radius, seg.visualStart, seg.visualEnd);
         ctx.closePath();
         ctx.fillStyle = seg.color;
         ctx.fill();
@@ -180,9 +181,9 @@
         ctx.lineWidth = 4;
         ctx.stroke();
 
-        // Рисуем текст
+        // Текст по центру сектора
         ctx.save();
-        const textAngle = seg.startAngle + (seg.endAngle - seg.startAngle) / 2;
+        const textAngle = seg.visualStart + equalAngle / 2;
         ctx.rotate(textAngle);
         ctx.textAlign = 'right';
         ctx.fillStyle = '#fff';
@@ -213,16 +214,17 @@
       ctx.restore();
     }
 
-    // Вращение с гарантированным попаданием внутрь сектора
+    // Вращение: выбор по вероятности, остановка в равном секторе
     function spin() {
       if (isSpinning || hasSpun) return;
       isSpinning = true;
       spinBtn.disabled = true;
 
-      // 1. Выбираем случайный сектор на основе вероятностей
-      const r = Math.random() * totalProb;
-      let chosenSeg = segments[0];
+      // 1. Выбираем приз по вероятности (визуально сектора равные!)
+      const r = Math.random() * 100;
       let acc = 0;
+      let chosenSeg = segments[0];
+      
       for (let seg of segments) {
         acc += seg.probability;
         if (r <= acc) {
@@ -231,19 +233,15 @@
         }
       }
 
-      // 2. Рассчитываем угол остановки ВНУТРИ сектора (с отступом от краёв)
-      const segWidth = chosenSeg.endAngle - chosenSeg.startAngle;
-      // Отступ: 15% от ширины сектора, но не более 0.12 радиан (~7°)
-      const margin = Math.min(segWidth * 0.15, 0.12); 
-      const stopAngle = chosenSeg.startAngle + margin + Math.random() * (segWidth - 2 * margin);
+      // 2. Рассчитываем угол остановки ВНУТРИ визуального сектора
+      const margin = equalAngle * 0.15; // 15% отступ от краёв
+      const stopAngle = chosenSeg.visualStart + margin + Math.random() * (equalAngle - 2 * margin);
 
-      // 3. Вычисляем, на сколько нужно повернуть колесо, чтобы stopAngle оказался под стрелкой (сверху)
-      // Стрелка статична на 270° (3π/2). Колесо крутится по часовой.
-      // Условие: (stopAngle + rotation) % 2π = 3π/2
+      // 3. Вычисляем поворот: чтобы stopAngle оказался под стрелкой (сверху = 3π/2)
       let rotationNeeded = (3 * Math.PI / 2) - stopAngle;
       rotationNeeded = ((rotationNeeded % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 
-      // 4. Добавляем к текущему углу: минимум 5 полных оборотов + точная доводка
+      // 4. Добавляем 5+ полных оборотов для анимации
       const currentMod = currentAngle % (2 * Math.PI);
       let delta = rotationNeeded - currentMod;
       if (delta < 0) delta += 2 * Math.PI;
@@ -256,7 +254,7 @@
       function animate(time) {
         const elapsed = time - startTime;
         const progress = Math.min(elapsed / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 3); // Плавное замедление
+        const ease = 1 - Math.pow(1 - progress, 3);
         
         currentAngle = startAngle + (targetAngle - startAngle) * ease;
         drawWheel(currentAngle);
