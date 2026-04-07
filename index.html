@@ -118,14 +118,14 @@
     // Все сектора будут ОДИНАКОВОГО размера визуально.
     // probability: шанс выпадения в % (сумма всех должна быть 100)
     const segments = [
-      { text: 'Скидка 5%',    probability: 1, color: '#FF6B6B' },
+      { text: 'Скидка 5%',    probability: 1, color: '#98D8C8' },
       { text: 'Скидка 10%',   probability: 1, color: '#4ECDC4' },
-      { text: 'Скидка 15%',   probability: 1, color: '#45B7D1' },
-      { text: 'Скидка 20%',   probability: 1,  color: '#FFA07A' },
+      { text: 'Скидка 15%',   probability: 1, color: '##98D8C8' },
+      { text: 'Скидка 20%',   probability: 1,  color: '#4ECDC4' },
       { text: 'Массаж шеи',   probability: 1, color: '#98D8C8' },
-      { text: 'Промокод ВЕСНА!', probability: 93, color: '#F7DC6F' },
-      { text: 'КОФЕ с собой', probability: 1, color: '#BB8FCE' },
-      { text: 'Массаж стоп',  probability: 1, color: '#85C1E2' }
+      { text: 'Промокод ВЕСНА!', probability: 93, color: '#4ECDC4' },
+      { text: 'КОФЕ с собой', probability: 1, color: '#98D8C8' },
+      { text: 'Массаж стоп',  probability: 1, color: '#4ECDC4' }
     ];
     // ============================================================
 
@@ -209,7 +209,7 @@
       ctx.font = 'bold 16px Segoe UI';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('ИСАЕВА СтудиЯ', 0, 0);
+      ctx.fillText('ИСАЕВА', 0, 0);
 
       ctx.restore();
     }
